@@ -1,0 +1,176 @@
+##clear all vars
+#rm(list=ls())
+
+##set working directory
+getwd()
+setwd("C:/Users/jwila/HKU/Service/2022/star/R july 2022")
+
+##CTT package required
+install.packages("CTT")
+if (!require(CTT)) {library(CTT)}
+
+##load data file in csv format, header=TRUE, sep=","
+library(readxl)
+dataset <- read_excel("dataset.xlsx")
+View(dataset)
+
+##check dataset and task_code
+head(dataset)
+unique(dataset$task_code)
+
+##input task and item information
+t <- "C2021R3M015" 
+item_key <- "c,a,c,,d,,d,b"
+inc <- 0
+
+##extract mc items
+item_key <- toupper(item_key)
+item_key <- strsplit(item_key, ",", fixed = TRUE)[[1]]
+full_length <- length(item_key)
+mc <<- !item_key == ""
+item_key <- item_key[mc]
+
+##extract target test 
+dataset <- dataset[ , c("task_code", "user_id", "item_code", "score", "student_response")]
+task <- subset(dataset, task_code == t , select = c("user_id", "item_code", "score", "student_response"))
+if (nrow(task) == 0) {stop("No item is retreived, check if item name (ie task_code) is correct.")}
+
+##build list of dataframe for each item_code, not necessary
+#task_split <- list()
+#task_split <- subset(task, item_code == task$item_code[1] )
+#for (x in unique(task$item_code)) {
+#  task_split[[x]] <- subset(task, item_code == x )
+#}
+
+##extract id
+#id <- task_split[[1]]$user_id
+id <- split(task$user_id, task$item_code)[[1]]
+
+##build mc score dataframe, not necessary
+#task_split <- split(task$score, factor(task$item_code, levels=unique(task$item_code)))
+#score_split <- split(task$score, task$item_code)
+#item_score <- as.data.frame(do.call(cbind, score_split))
+#if (length(item_score) != length(mc)) {stop("Items and keys do not match!")}
+#item_score <- item_score[mc]
+#row.names(item_score) <- id
+
+##build response dataframe
+#response_split <- split(task$student_response, factor(task$item_code, levels=unique(task$item_code)))
+response_split <- split(task$student_response, task$item_code)
+item_response <- as.data.frame(do.call(cbind, response_split))
+
+##build mc response dataframe
+if (sum(mc) > 0) {
+item_response_mc <- item_response[mc]
+item_response_mc[is.na(item_response_mc)] <- "missing" 
+row.names(item_response_mc) <- id
+}
+
+##build constructed response dataframe
+if (sum(!mc) >0) {
+item_response_constr <- item_response[!mc]
+row.names(item_response_constr) <- id
+}
+
+##score by CTT package
+item_scoring <- score(item_response_mc, item_key, output.scored = TRUE, rel = TRUE)
+
+##save scored result to csv file
+write.csv(item_scoring$scored, file = paste0(t,".scored.csv"))
+
+cat("\nClassical Item Analysis on", format(Sys.time(), "%a %b %d %X %Y"))
+
+cat("\nItem:",t)
+cat("\nMC Item key:", item_key, "\n")
+
+cat("\nFull length of the test:", full_length,
+    "\nNumber of MC items:", sum(mc),
+    "\nMC items:",
+    "\n")
+print(colnames(item_response_mc))
+
+##report classical item analysis
+item_score <- as.data.frame(item_scoring$scored)
+item_score[is.na(item_score)] <- 0 
+item_analysis <- itemAnalysis(item_score)
+sem <- item_analysis$scaleSD * (sqrt(1-item_analysis$alpha))
+
+cat("\nReliability report:",
+    "\n===================\n",
+    "\nMean = ", item_analysis$scaleMean,
+    "\nReliability (alpha) = ", item_analysis$alpha, 
+    "\nStandard Derviation (SD) = ", item_analysis$scaleSD,
+    "\nStandard error of measurement (SEM) =", sem,
+    "\n95% Confidence Interval (CI) = +/-", 1.96 * sem,
+    "\n\n")
+
+print(item_analysis$itemReport)
+
+##if the measure is lengthened by a factor
+##the reliability of new test is:
+cat("\nIf the test is in its full length, i.e.,", full_length, "items in total",
+    "\nReliability is expected to be: ", spearman.brown(item_analysis$alpha, full_length/sum(mc), "n")[[1]],
+    "\n")
+
+# if we want a new measure of alpha to be 0.7
+# the new test length is:
+if (item_analysis$alpha < 0.7) {
+cat("\nTo achieve new reliability =", 0.7, ", the test is needed to be lengthened by:",
+    "\n", spearman.brown(item_analysis$alpha, 0.7, "r")[[1]], "times.",
+    "\n")
+}
+
+cat("\nItem Analysis:",
+    "\n==============\n")  
+
+#plotting item discrimination, adapted from https://rpubs.com/Tarid/CTT 
+cvpb = 0.20  # critical value
+item.discrimination <- data.frame(item = 1:item_analysis$nItem , 
+                                  discrimination = item_analysis$itemReport$pBis)
+plot(item.discrimination,
+     type = "p",
+     pch = 1,
+     cex = 3,
+     col = "purple",
+     ylab = "Item-Total Correlation",
+     xlab = "Item Number",
+     ylim = c(0, 1),
+     main = "Test Item Discriminations")
+abline(h = cvpb, col = "red")
+text(data.matrix(item.discrimination), paste("i", data.matrix(item.discrimination)[,1], sep = ""), col = "red", cex = .7)
+
+dotchart(as.numeric(item_scoring$reliability$pBis), labels = colnames(item_scoring$scored) , xlim = c(0,1) ,  main = "point biserial discrimination")
+abline(v = 0.2, col = "red",  lty = 3 )
+
+##show distribution of scores
+cat("Distribution of MC marks:",
+    "\n=========================\n\n") 
+#for (x in 0:sum(mc)) {
+#  cat("Number of students got", x, "mark in MC:",
+#      nrow(item_score[total == x,]), "\n")
+#}
+table(total <- apply(item_score, 1, sum))
+#table(total <- as.data.frame(item_scoring$score)[,1])
+
+cat("\nThe following", nrow(item_score[total == sum(mc),]), "students got the full", sum(mc), "marks in MC:\n")
+print(row.names(item_score[total == sum(mc),]))
+cat("\nUse function txtr to display textual response by students with different marks in MC.\n")
+
+##Reporting distract analysis
+#bug: Error in cut.default(),  'breaks' are not unique. Try adjusting defineGroups to fix.
+low <- 0.2 
+top <- 0.6
+mid <- 1- low-top
+cat("\nDiscrimination cut-off:", low, ",", mid, ",", top, "\n\n")
+print(distractorAnalysis(item_response_mc, item_key,  defineGroups=c(low, mid, top)))
+
+##
+mark <- 0
+item <- 2
+student <- "58529310"
+View(item_response_constr[total == mark, item, drop=FALSE])
+View(item_response_constr[total == mark, item, drop=FALSE])
+View(item_response_constr[paste0(student), 1, drop=FALSE])
+View(item_response_constr[paste0(student), , drop=FALSE])
+View(item_response_constr[total == 3,c(1,2)])
+View(item_response_constr[total == 3,1, drop=FALSE])
