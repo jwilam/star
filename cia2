@@ -1,0 +1,309 @@
+###classical item analysis for STAR 2.0
+###23 July 2022
+
+##clear all vars
+#rm(list=ls())
+
+##set working directory
+getwd()
+setwd("C:/Users/jwila/HKU/Service/2022/star/R july 2022")
+
+##readxl package required
+if (!"readxl" %in% rownames(installed.packages())) {install.packages("readxl")}
+if (!require(readxl)) {library(readxl)}
+
+##CTT package required
+if (!"CTT" %in% rownames(installed.packages())) {install.packages("CTT")}
+if (!require(CTT)) {library(CTT)}
+
+##load task and item information from excel file
+##assign starkey = filename of the key file
+starkey <- function(taskitemkey) {
+  #taskitemkey <- read_excel("taskitemkey.xlsx")
+  #print(taskitemkey[ , 1])
+  tik <- data.frame( task = taskitemkey[ , 1] ,
+                   item.key = character(nrow(taskitemkey)))
+  for (i in 1:nrow(taskitemkey)) {
+    j <- as.character(taskitemkey[i,2:length(taskitemkey)])
+    tik[i, 2] <- do.call(paste, c(as.list(j[!is.na(j)]), sep = ","))
+  }
+  #print(tik)
+  tik <<- tik
+}
+
+##input task and item information manually
+#t <- c("C2021R3L013", "C2021R3L014", "C2021R3M015", "C2021R3M016", "C2021R3H017", "C2021R3H018" )
+#item.key <- c("na,na,d,b,b,a,na,na,na,d,na,c,na" ,
+#              "b,a,b,c,d,d,na,na" ,
+#              "c,a,c,na,d,na,d,b" ,
+#              "c,c,d,b,na,na,na" ,
+#              "b,d,b,d,na,na" ,
+#              "na,a,b,c,na,d,na" )
+#tik <- data.frame(task=t,item.key)
+
+##input task and item information by item manually
+#t <- "C2021R3L013" 
+#item.key <- "na,na,d,b,b,a,na,na,na,d,na,c,na"
+
+##input task and item information by item manually
+#t <- "C2021R3L014" 
+#item.key <- "b,a,b,c,d,d,na,na,na"
+
+##input task and item information by item manually
+#t <- "C2021R3M015" 
+#item.key <- "c,a,c,,d,na,d,b"
+
+##input task and item information by item manually
+#t <- "C2021R3M016" 
+#item.key <- "c,c,d,b,na,na,na"
+
+##input task and item information by item manually
+#t <- "C2021R3H017" 
+#item.key <- "b,d,b,d,na,na"
+
+##input task and item information by item manually
+#t <- "C2021R3H018" 
+#item.key <- "na,a,b,c,na,d,na"
+
+##load data file in long excel format, header=TRUE
+#stardata <- read_excel("dataset.xlsx")
+stardata <- function(dataset) {
+  dataset.long <<- dataset[ , c("task_code", "user_id", "item_code", "score", "student_response")]
+}
+
+##check dataset and task_code
+#head(dataset.long)
+#unique(dataset.long$task_code)
+
+##load data file of single item in wide excel format, header=TRUE
+#startask <- read_excel("M015_wide.xlsx")
+startask <- function(dataset) {
+  dataset[,1] <- make.unique(as.character(data.frame(dataset)[,1])) 
+  item_response <<- data.frame(dataset, row.names = 1)
+}
+
+cia <- function(t, item.key, low=0.27, top=0.27, df="long") {
+
+cat("\nCoding by LAM Wai Ip, July 2022\n")  
+
+##default
+if (missing(t)) {
+  cat("\nDemo\n\n")
+  t=1
+  }  
+  
+##select task from starkey database
+if (is.numeric(t)) {
+if (t > nrow(tik)) {stop("There is/are only ", nrow(tik), " task(s) input.")}
+item.key <- tik[t,2]
+t <- tik[t,1]
+#print(t)
+#print(item.key)
+}
+
+##extract mc items
+item.key <- toupper(item.key)
+item.key <- strsplit(item.key, ",", fixed = TRUE)[[1]]
+full_length <- length(item.key)
+item.key[item.key=="NA"] <- ""
+mc <<- !item.key == ""
+item.key <- item.key[mc]
+
+if (df == "long") {
+
+##extract target test 
+#dataset.long <- dataset.long[ , c("task_code", "user_id", "item_code", "score", "student_response")]
+task <- subset(dataset.long, task_code == t , select = c("user_id", "item_code", "score", "student_response"))
+if (nrow(task) == 0) {stop("No item is retreived, check if item name (ie task_code) is correct.")}
+
+##build list of dataframe for each item_code, not necessary
+#task_split <- list()
+#task_split <- subset(task, item_code == task$item_code[1] )
+#for (x in unique(task$item_code)) {
+#  task_split[[x]] <- subset(task, item_code == x )
+#}
+
+##extract id
+#id <- task_split[[1]]$user_id
+#id <- split(task$user_id, task$item_code)[[1]]
+id <- split(task$user_id, factor(task$item_code, levels=unique(task$item_code)))[[1]]
+id <- make.unique(as.character(id))
+
+##build mc score dataframe, not necessary
+#task_split <- split(task$score, factor(task$item_code, levels=unique(task$item_code)))
+#score_split <- split(task$score, task$item_code)
+#item_score <- as.data.frame(do.call(cbind, score_split))
+#if (length(item_score) != length(mc)) {stop("Items and keys do not match!")}
+#item_score <- item_score[mc]
+#row.names(item_score) <- id
+
+##build response dataframe
+##has to preserve natural order of factors for split function, very crucial!
+response_split <- split(task$student_response, factor(task$item_code, levels=unique(task$item_code)))
+#response_split <- split(task$student_response, task$item_code) #wrong
+item_response <- as.data.frame(do.call(cbind, response_split))
+row.names(item_response) <- id
+
+##save item_response result to csv file
+##make sure no file with the same name is running 
+write.csv(item_response, file = paste0(t,".response.csv"))
+
+}
+
+##remove NA from item_response
+item_response[is.na(item_response)] <- "missing" 
+
+##build mc response dataframe
+if (sum(mc) > 0) {
+item_response_mc <- item_response[mc]
+}
+
+##build constructed response dataframe
+if (sum(!mc) >0) {
+item_response_constr <<- item_response[!mc]
+}
+
+##score by CTT package
+item_scoring <- score(item_response_mc, item.key, output.scored = TRUE, rel = TRUE)
+item_score <- as.data.frame(item_scoring$scored)
+
+##save scored result to csv file
+##make sure no file with the same name is running 
+write.csv(item_scoring$scored, file = paste0(t,".scored.csv"))
+
+##double confirm no NA value in item_score 
+item_score[is.na(item_score)] <- 0 
+
+##conduct classical item analysis
+item_analysis <- itemAnalysis(item_score)
+sem <- item_analysis$scaleSD * (sqrt(1-item_analysis$alpha))
+
+##report classical item analysis
+cat("\nClassical Item Analysis on", format(Sys.time(), "%a %b %d %X %Y"))
+cat("\n")
+
+cat("\nItem:",t)
+cat("\nMC Item key:", item.key, "\n")
+cat("\nFull length of the test:", full_length,
+    "\nNumber of MC items:", sum(mc),
+    "\nMC items:",
+    "\n")
+print(colnames(item_response_mc))
+
+##show distribution of scores
+cat("\nDistribution of MC marks:",
+    "\n=========================\n\n")
+cat("Upper row: Scores",
+    "\nLower row: Number of students")
+#for (x in 0:sum(mc)) {
+#  cat("Number of students got", x, "mark in MC:",
+#      nrow(item_score[total == x,]), "\n")
+#}
+print(table(total <<- apply(item_score, 1, sum)))
+#table(total <- as.data.frame(item_scoring$score)[,1])
+
+cat("\nThe following", nrow(item_score[total == sum(mc),]), "students got the full", sum(mc), "marks in MC:\n")
+print(row.names(item_score[total == sum(mc),]))
+#cat("\nUse function txtr to display textual response by students with different marks in MC.\n")
+
+cat("\nReliability report:",
+    "\n===================\n",
+    "\nMean = ", item_analysis$scaleMean,
+    "\nReliability (alpha) = ", item_analysis$alpha, 
+    "\nStandard Derviation (SD) = ", item_analysis$scaleSD,
+    "\nStandard error of measurement (SEM) =", sem,
+    "\n95% Confidence Interval (CI) = +/-", 1.96 * sem,
+    "\n")
+
+##if the measure is lengthened by a factor
+##the reliability of new test is:
+cat("\nIf the test is in its full length, i.e.,", full_length, "items in total",
+    "\nReliability is expected to be: ", spearman.brown(item_analysis$alpha, full_length/sum(mc), "n")[[1]],
+    "\n")
+
+## if we want a new measure of alpha to be 0.7
+## the new test length is:
+if (item_analysis$alpha < 0.7) {
+  cat("\nTo achieve new reliability =", 0.7, ", the length of mc is needed to be lengthened by:",
+      "\n", spearman.brown(item_analysis$alpha, 0.7, "r")[[1]], "times.",
+      "\n")
+}
+
+cat("\nItem Analysis:",
+    "\n==============\n\n")  
+
+print(item_analysis$itemReport)
+
+cat("\nPlotting Reliability(alpha) and Point Biserial(pBis):",
+    "\n=====================================================\n") 
+cat("\nPlease refer to graphs on the Plots panel.\n")
+
+##plot item discrimination, adapted from https://rpubs.com/Tarid/CTT 
+#cvpb = 0.20  # critical value
+#item.discrimination <- data.frame(item = 1:item_analysis$nItem , 
+#                                  discrimination = item_analysis$itemReport$pBis)
+#plot(item.discrimination,
+#     type = "p",
+#     pch = 1,
+#     cex = 3,
+#     col = "purple",
+#     ylab = "Item-Total Correlation",
+#     xlab = "Item Number",
+#     ylim = c(0, 1),
+#     main = "Test Item Discriminations")
+#abline(h = cvpb, col = "red")
+#text(data.matrix(item.discrimination), paste("i", data.matrix(item.discrimination)[,1], sep = ""), col = "red", cex = .7)
+
+##plot item discrimination (pBis)
+cvpb = 0.20  # critical value
+#dotchart(as.numeric(item_scoring$reliability$pBis), labels = colnames(item_scoring$scored) , xlim = c(0,1) ,  main = "point biserial discrimination")
+dotchart(as.numeric(item_analysis$itemReport$pBis), 
+         labels = colnames(item_scoring$scored) , 
+         xlim = c(0,1) ,  
+         main = "point biserial (pBis) discrimination")
+abline(v = cvpb, col = "red",  lty = 3 )
+
+##plot alphaIfDeleted
+dotchart( item_analysis$alpha - item_analysis$itemReport$alphaIfDeleted , 
+          labels = item_analysis$itemReport$itemName, 
+          xlim = c(-0.5,0.5),
+          main = "Reliability Contribution",
+          xlab = "Alpha drop if item deleted")
+abline(v = 0, col = "red",  lty = 3 )
+
+##report distract analysis
+#bug: Error in cut.default(),  'breaks' are not unique. Try adjusting defineGroups to fix.
+cat("\nDistractor Analysis:",
+    "\n====================\n")  
+mid <- 1- low-top
+cat("\nDiscrimination cut-off:", low, ",", mid, ",", top, "\n\n")
+#print(distractorAnalysis(item_response_mc, item.key,  defineGroups=c(low, mid, top), csvReport=paste0(t,".distractor.csv")))
+da <- distractorAnalysis(item_response_mc, item.key,  defineGroups=c(low, mid, top), csvReport=paste0(t,".da.csv"))
+print(da)
+
+}
+
+
+##display constructed response content
+display <- function(mark = sum(mc), item ) {
+  #print(table(total))
+  cat("\nConstructed item(s):",
+      "\n====================\n")  
+  cat("Displaying constructed response(s) of", 
+      nrow(item_response_constr[total == mark, ]), 
+      "student(s) who got", mark, "mark(s) in mc.\n")
+  if (missing(item)) {
+    for (i in 1:length(item_response_constr)) {
+      cat("\n",i,") ",colnames(item_response_constr)[i])
+    }
+    View(item_response_constr[total == mark, , drop=FALSE])
+  } else {
+    if (max(item) > length(item_response_constr)) {stop("There is/are only ", length(item_response_constr), " item(s).")} 
+    for (i in 1:length(item)) {
+      cat("\n",item[i],") ",colnames(item_response_constr)[item[i]])
+    }
+    View(item_response_constr[total == mark, item, drop=FALSE])
+  }
+}
+
+
