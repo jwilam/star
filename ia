@@ -4,13 +4,20 @@
 ##clear all vars
 rm(list=ls())
 
-##remove CTT package
-detach("package:CTT", unload = TRUE)
-remove.packages("CTT")
-
-##remove readxl package
-detach("package:readxl", unload = TRUE)
-remove.packages("readxl")
+##remove packages
+detach(c("package:CTT", 
+         "package:readxl",
+         "package:mirt",
+         "package:Rcpp",
+         "package:lattice",
+         "package:latticeExtra",
+         unload = TRUE))
+remove.packages(c("package:CTT", 
+                  "package:readxl",
+                  "package:mirt",
+                  "package:Rcpp",
+                  "package:lattice",
+                  "package:latticeExtra"))
 
 ##readxl package required
 if (!"readxl" %in% rownames(installed.packages())) {install.packages("readxl")}
