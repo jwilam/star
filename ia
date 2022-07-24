@@ -5,19 +5,20 @@
 rm(list=ls())
 
 ##remove packages
-detach(c("package:CTT", 
-         "package:readxl",
-         "package:mirt",
-         "package:Rcpp",
-         "package:lattice",
-         "package:latticeExtra",
-         unload = TRUE))
-remove.packages(c("package:CTT", 
-                  "package:readxl",
-                  "package:mirt",
-                  "package:Rcpp",
-                  "package:lattice",
-                  "package:latticeExtra"))
+detach(package:CTT, unload = TRUE)
+detach(package:readxl, unload = TRUE)
+detach(package:mirt, unload = TRUE)
+detach(package:WrightMap, unload = TRUE)
+detach(package:latticeExtra, unload = TRUE)
+detach(package:lattice, unload = TRUE)
+detach(package:Rcpp, unload = TRUE)
+remove.packages("CTT")
+remove.packages("readxl")
+remove.packages("mirt")
+remove.packages("Rcpp")
+remove.packages("lattice")
+remove.packages("latticeExtra")
+remove.packages("WrightMap")
 
 ##readxl package required
 if (!"readxl" %in% rownames(installed.packages())) {install.packages("readxl")}
