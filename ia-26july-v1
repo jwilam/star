@@ -1,8 +1,12 @@
-###classical item analysis for STAR 2.0
-###25 July 2022 noon
+###Item analysis for STAR 2.0
+###March, July 2022
 
+##debug
 rm(list=ls())
+rm(task_nm)
+rm(item_key)
 
+##install packages required
 install.packages("CTT")
 install.packages("mirt")
 install.packages("WrightMap")
@@ -63,7 +67,7 @@ cia <- function(task.nm, item.key, low=0.27, top=0.27, starschool="", starclass=
   cat("## Coding by LAM Wai Ip, July 2022  ##")  
   cat("\n######################################\n")  
   
-##set task.nm & item.key
+###1. set task.nm, item.key (user's parameters) & task_um, item_key (global variables)
 
     if (missing(task.nm)) {
     if (!exists("task_nm")) {
@@ -93,7 +97,7 @@ cia <- function(task.nm, item.key, low=0.27, top=0.27, starschool="", starclass=
   mc <<- !item.key == ""
   item.key <- item.key[mc]
 
-##subset the dataset.long  
+###2. convert long format to wide format   
   
 if (long) {
 
@@ -133,17 +137,20 @@ if (sum(!mc) >0) {
 item_response_constr <<- item_response[!mc]
 }
 
+##save item_response result to csv file, make sure no file with the same name is running 
+write.csv(item_response, file = paste0(task.nm,starschool,starclass,".response.csv"))
+
+###3. score mc by CTT
+
 ##score by CTT package, double confirm rm all NA from item.score
 item_scoring <- score(item_response_mc, item.key, output.scored = TRUE, rel = TRUE)
 item_score <<- as.data.frame(item_scoring$scored)
 item_score[is.na(item_score)] <- 0 
 
-##save item_response result to csv file, make sure no file with the same name is running 
-write.csv(item_response, file = paste0(task.nm,starschool,starclass,".response.csv"))
-
 ##save scored result to csv file, make sure no file with the same name is running 
 write.csv(item_score, file = paste0(task.nm,starschool,starclass,".scored.csv"))
 
+###4. report CTT analysis
 
 ##conduct classical item analysis
 item_analysis <- itemAnalysis(item_score)
@@ -267,22 +274,24 @@ print(distractorAnalysis(item_response_mc, item.key,
                          csvReport=paste0(task.nm,starschool,starclass,".da.csv")))
 
 }
-#cia()
+cia()
 
 #=============================#
 # Run IRT
 #=============================#
 
 ##analysis by item response theory (irt)
-irt <- function() {
+irt <- function(pl="2PL") {
   
-  cat("\nIRT Analysis on task: \n")
-  cat("\n", task_nm, " ", starschool, " ", starclass, "\n\n")
+  cat("\nIRT Analysis: \n")
+  cat("\nTask: ", task_nm)
+  if (!starschool == "") {cat( "\nSchool :", starschool, " ", starclass) }
+  cat("\nModel: ", pl, "\n\n")
   
   ## save another data frame
   mydata_irt <- item_score
-  ## irt 2pl model
-  mymodel <- mirt(mydata_irt, 1, itemtype = '2PL')
+  ## irt 2pl model defaulted
+  mymodel <- mirt(mydata_irt, 1, itemtype = pl)
   print(coef(mymodel, IRTpars=TRUE, simplify=TRUE))
   print(itemfit(mymodel))
   ## plot
@@ -295,7 +304,7 @@ irt <- function() {
   wrightMap(theta[,1], mymodel_coefs$items[,2])
   
 }
-#irt()
+irt()
 
 #=============================#
 # Display constructed response
@@ -323,4 +332,4 @@ display <- function(mark = sum(mc), item ) {
     View(item_response_constr[total == mark, item, drop=FALSE])
   }
 }
-#display()
+display()
